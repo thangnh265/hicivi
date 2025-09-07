@@ -1,0 +1,71 @@
+erDiagram
+    TENANTS {
+        UUID tenant_id PK
+        VARCHAR slug UK
+        VARCHAR name
+        ENUM mode "internal, agency"
+        JSONB settings
+        TIMESTAMP created_at
+    }
+    CLIENTS {
+        UUID client_id PK
+        UUID tenant_id FK
+        VARCHAR name
+        JSONB contact_info
+        VARCHAR logo_url
+        TIMESTAMP created_at
+    }
+    USERS {
+        UUID user_id PK
+        UUID tenant_id FK
+        VARCHAR email UK
+        VARCHAR password_hash
+        ENUM role "super_admin, admin, editor, viewer"
+        TIMESTAMP created_at
+    }
+    JOBS {
+        UUID job_id PK
+        UUID tenant_id FK
+        UUID client_id FK "optional"
+        VARCHAR title
+        TEXT description
+        ENUM status "open, closed, draft"
+        TIMESTAMP deadline
+        TIMESTAMP created_at
+    }
+    CVS {
+        UUID cv_id PK
+        UUID job_id FK
+        UUID tenant_id FK
+        UUID client_id FK "optional"
+        JSONB candidate_info
+        JSONB files
+        ENUM status "pending, in_review, passed, rejected, onboarded"
+        FLOAT ai_score
+        JSONB manual_scores
+        JSONB timeline
+        TIMESTAMP created_at
+        TIMESTAMP expires_at
+    }
+    HR_METRICS {
+        UUID metric_id PK
+        UUID user_id FK
+        UUID tenant_id FK
+        UUID job_id FK "optional"
+        INT sourced_cvs
+        JSONB passed_rounds
+        INT onboarded_cvs
+        INTERVAL avg_processing_time
+        TIMESTAMP updated_at
+    }
+
+    TENANTS ||--o{ CLIENTS : "has (agency only)"
+    TENANTS ||--|{ USERS : "has"
+    TENANTS ||--|{ JOBS : "has"
+    TENANTS ||--|{ CVS : "has"
+    TENANTS ||--|{ HR_METRICS : "has"
+    CLIENTS ||--o{ JOBS : "has"
+    CLIENTS ||--o{ CVS : "has"
+    USERS ||--o{ HR_METRICS : "has"
+    JOBS ||--|{ CVS : "has"
+    JOBS ||--o{ HR_METRICS : "tracks"

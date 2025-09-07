@@ -1,0 +1,568 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Hicivi API",
+    "description": "API for Hicivi.com, a SaaS platform for HR CV management with multi-tenancy and AI-powered screening.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://api.hicivi.com/api/v1",
+      "description": "Production server"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "Tenant": {
+        "type": "object",
+        "properties": {
+          "tenantId": { "type": "string", "format": "uuid" },
+          "slug": { "type": "string", "example": "abc-corp" },
+          "name": { "type": "string", "example": "ABC Corp" },
+          "mode": { "type": "string", "enum": ["internal", "agency"] },
+          "settings": { "type": "object" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        },
+        "required": ["tenantId", "slug", "name", "mode"]
+      },
+      "Client": {
+        "type": "object",
+        "properties": {
+          "clientId": { "type": "string", "format": "uuid" },
+          "tenantId": { "type": "string", "format": "uuid" },
+          "name": { "type": "string", "example": "XYZ Corp" },
+          "contactInfo": { "type": "object", "example": { "email": "xyz@corp.com" } },
+          "logoUrl": { "type": "string", "example": "https://s3.amazonaws.com/logo.png" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        },
+        "required": ["clientId", "tenantId", "name"]
+      },
+      "Job": {
+        "type": "object",
+        "properties": {
+          "jobId": { "type": "string", "format": "uuid" },
+          "tenantId": { "type": "string", "format": "uuid" },
+          "clientId": { "type": "string", "format": "uuid", "nullable": true },
+          "title": { "type": "string", "example": "Senior Developer" },
+          "description": { "type": "string" },
+          "status": { "type": "string", "enum": ["open", "closed", "draft"] },
+          "deadline": { "type": "string", "format": "date-time" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        },
+        "required": ["jobId", "tenantId", "title", "status"]
+      },
+      "CV": {
+        "type": "object",
+        "properties": {
+          "cvId": { "type": "string", "format": "uuid" },
+          "jobId": { "type": "string", "format": "uuid" },
+          "tenantId": { "type": "string", "format": "uuid" },
+          "clientId": { "type": "string", "format": "uuid", "nullable": true },
+          "candidateInfo": { "type": "object", "example": { "name": "John Doe", "email": "john@example.com" } },
+          "files": { "type": "array", "items": { "type": "object", "properties": { "url": { "type": "string" }, "size": { "type": "number" } } } },
+          "status": { "type": "string", "enum": ["pending", "in_review", "passed", "rejected", "onboarded"] },
+          "aiScore": { "type": "number", "example": 85 },
+          "manualScores": { "type": "object", "example": { "user1": 90 } },
+          "timeline": { "type": "array", "items": { "type": "object", "properties": { "event": { "type": "string" }, "timestamp": { "type": "string", "format": "date-time" } } } },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "expiresAt": { "type": "string", "format": "date-time" }
+        },
+        "required": ["cvId", "jobId", "tenantId", "status"]
+      },
+      "HRMetrics": {
+        "type": "object",
+        "properties": {
+          "metricId": { "type": "string", "format": "uuid" },
+          "userId": { "type": "string", "format": "uuid" },
+          "tenantId": { "type": "string", "format": "uuid" },
+          "jobId": { "type": "string", "format": "uuid", "nullable": true },
+          "sourcedCvs": { "type": "integer", "example": 50 },
+          "passedRounds": { "type": "object", "example": { "screening": 10 } },
+          "onboardedCvs": { "type": "integer", "example": 5 },
+          "avgProcessingTime": { "type": "string", "example": "2 weeks" }
+        }
+      }
+    }
+  },
+  "security": [
+    { "BearerAuth": [] }
+  ],
+  "paths": {
+    "/tenants": {
+      "post": {
+        "summary": "Create a new tenant",
+        "description": "Creates a tenant (company/agency) during signup.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "mode": { "type": "string", "enum": ["internal", "agency"] },
+                  "email": { "type": "string", "format": "email" },
+                  "password": { "type": "string" }
+                },
+                "required": ["name", "mode", "email", "password"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Tenant created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Tenant" }
+              }
+            }
+          },
+          "400": { "description": "Invalid input" }
+        }
+      }
+    },
+    "/{tenantId}/settings": {
+      "get": {
+        "summary": "Get tenant settings",
+        "description": "Retrieve settings for a specific tenant.",
+        "parameters": [
+          { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Tenant settings",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Tenant" }
+              }
+            }
+          },
+          "403": { "description": "Unauthorized" }
+        }
+      }
+    },
+    "/{tenantId}/clients": {
+      "post": {
+        "summary": "Create a client (agency mode)",
+        "description": "Create a new client for an agency tenant.",
+        "parameters": [
+          { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "contactInfo": { "type": "object" },
+                  "logoUrl": { "type": "string" }
+                },
+                "required": ["name"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Client created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Client" }
+              }
+            }
+          },
+          "403": { "description": "Unauthorized" }
+        }
+      },
+      "get": {
+        "summary": "List clients (agency mode)",
+        "description": "Retrieve all clients for an agency tenant.",
+        "parameters": [
+          { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "List of clients",
+            "content": {
+              "application/json": {
+                "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Client" } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/{tenantId}/jobs": {
+      "get": {
+        "summary": "List jobs",
+        "description": "Retrieve jobs for a tenant, filterable by client or status.",
+        "parameters": [
+          { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "clientId", "in": "query", "schema": { "type": "string", "format": "uuid" } },
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["open", "closed", "draft"] } }
+        ],
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "List of jobs",
+            "content": {
+              "application/json": {
+                "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Job" } }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a job",
+        "description": "Create a new job for a tenant or client.",
+        "parameters": [
+          { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": { "type": "string" },
+                  "description": { "type": "string" },
+                  "clientId": { "type": "string", "format": "uuid", "nullable": true },
+                  "deadline": { "type": "string", "format": "date-time" }
+                },
+                "required": ["title"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Job created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Job" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/{tenantId}/jobs/{jobId}": {
+      "get": {
+        "summary": "Get job details",
+        "description": "Retrieve details of a specific job, including associated CVs.",
+        "parameters": [
+          { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "jobId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Job details",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Job" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/jobs/{jobId}/submit": {
+      "post": {
+        "summary": "Submit CV (public)",
+        "description": "Public endpoint for candidates to submit CVs.",
+        "parameters": [
+          { "name": "jobId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "candidateInfo": { "type": "object" },
+                  "files": { "type": "array", "items": { "type": "object", "properties": { "url": { "type": "string" }, "size": { "type": "number" } } } }
+                },
+                "required": ["candidateInfo", "files"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "CV submitted",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/CV" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/{tenantId}/cvs/upload": {
+      "post": {
+        "summary": "Upload CVs manually",
+        "description": "HR uploads CVs (max 50) for a job.",
+        "parameters": [
+          { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "jobId": { "type": "string", "format": "uuid" },
+                  "files": { "type": "array", "items": { "type": "object", "properties": { "url": { "type": "string" }, "size": { "type": "number" } } } }
+                },
+                "required": ["jobId", "files"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "CVs uploaded",
+            "content": {
+              "application/json": {
+                "schema": { "type": "array", "items": { "$ref": "#/components/schemas/CV" } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/{tenantId}/cvs": {
+      "get": {
+        "summary": "List CVs",
+        "description": "Retrieve CVs for a tenant, filterable by job or status.",
+        "parameters": [
+          { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "jobId", "in": "query", "schema": { "type": "string", "format": "uuid" } },
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["pending", "in_review", "passed", "rejected", "onboarded"] } },
+          { "name": "clientId", "in": "query", "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "List of CVs",
+            "content": {
+              "application/json": {
+                "schema": { "type": "array", "items": { "$ref": "#/components/schemas/CV" } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/{tenantId}/cvs/{cvId}/score": {
+      "post": {
+        "summary": "Add CV score",
+        "description": "Add AI or manual score to a CV.",
+        "parameters": [
+          { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "cvId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "score": { "type": "number", "minimum": 0, "maximum": 100 },
+                  "userId": { "type": "string", "format": "uuid", "nullable": true }
+                },
+                "required": ["score"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Score added",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/CV" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/{tenantId}/hr-metrics": {
+      "get": {
+        "summary": "Get HR performance metrics",
+        "description": "Retrieve performance metrics for HR users.",
+        "parameters": [
+          { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "userId", "in": "query", "schema": { "type": "string", "format": "uuid" } },
+          { "name": "jobId", "in": "query", "schema": { "type": "string", "format": "uuid" } },
+          { "name": "dateRange", "in": "query", "schema": { "type": "string" } }
+        ],
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "HR metrics",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HRMetrics" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/{tenantId}/clients/{clientId}/reports/export": {
+      "post": {
+        "summary": "Export branded report",
+        "description": "Export job or client report as PDF/CSV.",
+        "parameters": [
+          { "name": "tenantId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "clientId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "jobId": { "type": "string", "format": "uuid" },
+                  "format": { "type": "string", "enum": ["pdf", "csv"] },
+                  "includeLogo": { "type": "boolean" }
+                },
+                "required": ["jobId", "format"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Report exported",
+            "content": {
+              "application/json": {
+                "schema": { "type": "object", "properties": { "reportUrl": { "type": "string" } } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/super-admin/tenants": {
+      "get": {
+        "summary": "List all tenants",
+        "description": "Retrieve all tenants (super admin only).",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "List of tenants",
+            "content": {
+              "application/json": {
+                "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Tenant" } }
+              }
+            }
+          },
+          "403": { "description": "Unauthorized (requires super_admin role)" }
+        }
+      },
+      "post": {
+        "summary": "Create tenant (super admin)",
+        "description": "Manually create a tenant.",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "mode": { "type": "string", "enum": ["internal", "agency"] }
+                },
+                "required": ["name", "mode"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Tenant created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Tenant" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/super-admin/config": {
+      "put": {
+        "summary": "Update system configuration",
+        "description": "Update global system settings (super admin only).",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "cv_expire_weeks": { "type": "number" },
+                  "ai_score_threshold": { "type": "number" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Config updated",
+            "content": {
+              "application/json": {
+                "schema": { "type": "object", "properties": { "success": { "type": "boolean" } } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/super-admin/reports": {
+      "get": {
+        "summary": "System-wide reports",
+        "description": "Retrieve system-wide metrics (super admin only).",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "System reports",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "totalTenants": { "type": "number" },
+                    "totalOnboarded": { "type": "number" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
